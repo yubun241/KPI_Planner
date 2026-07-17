@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KPI Roadmap Planner - Professional</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+        .calendar-day { min-height: 100px; border: 1px solid #e5e7eb; padding: 4px; position: relative; }
+        .kpi-card { background: #fff; border-left: 4px solid #3b82f6; padding: 4px; font-size: 11px; margin-top: 4px; cursor: pointer; position: relative; border-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .tooltip { visibility: hidden; position: absolute; z-index: 50; background: #1f2937; color: #fff; padding: 10px; border-radius: 6px; width: 220px; opacity: 0; bottom: 110%; left: 50%; transform: translateX(-50%); transition: 0.2s; pointer-events: none; }
+        .kpi-card:hover .tooltip { visibility: visible; opacity: 1; }
+        .progress-bar-container { width: 100%; height: 16px; background: #e5e7eb; border-radius: 8px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: #10b981; transition: width 0.5s; }
+    </style>
+</head>
+<body class="bg-slate-50 p-6">
+
+<div class="max-w-6xl mx-auto space-y-6">
+    
+    <!-- Header & Actions -->
+    <div class="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div>
+            <h1 class="text-xl font-bold text-slate-800">KPI Roadmap Planner</h1>
+            <p class="text-xs text-slate-400">Status Monitoring and Report Generation</p>
+        </div>
+        <div class="flex space-x-3">
+            <button onclick="exportMarkdown()" class="bg-slate-700 text-white px-5 py-2 rounded text-sm font-medium hover:bg-slate-800 transition">
+                テキスト出力
+            </button>
+        </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div class="flex justify-between items-end mb-2">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Progress</span>
+            <span id="totalProgressText" class="text-3xl font-black text-emerald-600">0%</span>
+        </div>
+        <div class="progress-bar-container"><div id="totalProgressFill" class="progress-bar-fill"></div></div>
+    </div>
+
+    <!-- KPI Management Table -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+            <h2 class="text-sm font-bold text-slate-700">KPIリスト</h2>
+            <button onclick="addRow()" class="text-indigo-600 text-xs font-bold hover:underline">新規項目を追加</button>
+        </div>
+        <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase border-b border-slate-200">
+                <tr>
+                    <th class="p-3">KPI名</th>
+                    <th class="p-3 text-indigo-600">目標値</th>
+                    <th class="p-3">達成日数 (日後)</th>
+                    <th class="p-3">詳細説明</th>
+                    <th class="p-3">寄与度 (%)</th>
+                    <th class="p-3 text-center">完了</th>
+                    <th class="p-3"></th>
+                </tr>
+            </thead>
+            <tbody id="kpiTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- Calendar Visualization -->
+    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <h2 class="text-sm font-bold text-slate-700 mb-4">ロードマップ・カレンダー</h2>
+        <div id="calendarGrid" class="calendar-grid border-l border-t border-slate-200"></div>
+    </div>
+
+    <!-- Text Output Modal -->
+    <div id="modal" class="fixed inset-0 bg-slate-900/60 hidden flex items-center justify-center p-4 z-[100]">
+        <div class="bg-white w-full max-w-3xl rounded-lg shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
+                <h3 class="font-bold text-slate-700 text-sm">データ出力 (Markdown形式)</h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto">
+                <textarea id="markdownOutput" class="w-full h-80 p-4 bg-slate-50 border border-slate-200 rounded font-mono text-xs leading-relaxed outline-none focus:border-indigo-500" readonly></textarea>
+            </div>
+            <div class="p-4 border-t bg-slate-50 rounded-b-lg flex justify-end space-x-3">
+                <button onclick="closeModal()" class="px-4 py-2 text-sm text-slate-600 font-medium hover:bg-slate-100 transition">閉じる</button>
+                <button onclick="copyToClipboard()" class="px-6 py-2 bg-slate-800 text-white text-sm rounded font-bold hover:bg-slate-900 transition">コピー</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let kpiData = [];
+    const today = 17;
+
+    function addRow() {
+        const id = Date.now();
+        kpiData.push({ id, name: '新規項目', target: '-', days: 7, detail: '', weight: 10, completed: false });
+        render();
+    }
+
+    function updateData(id, field, value) {
+        const item = kpiData.find(d => d.id === id);
+        if (field === 'days' || field === 'weight') {
+            item[field] = parseInt(value) || 0;
+        } else if (field === 'completed') {
+            item[field] = value;
+        } else {
+            item[field] = value;
+        }
+        render();
+    }
+
+    function removeRow(id) { kpiData = kpiData.filter(d => d.id !== id); render(); }
+
+    function render() {
+        const tbody = document.getElementById('kpiTableBody');
+        tbody.innerHTML = '';
+        let totalProgress = 0;
+
+        kpiData.forEach(item => {
+            if (item.completed) totalProgress += item.weight;
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-slate-100 hover:bg-slate-50 transition';
+            tr.innerHTML = `
+                <td class="p-2"><input type="text" value="${item.name}" onchange="updateData(${item.id}, 'name', this.value)" class="w-full bg-transparent outline-none focus:text-indigo-600"></td>
+                <td class="p-2"><input type="text" value="${item.target}" onchange="updateData(${item.id}, 'target', this.value)" class="w-full bg-transparent outline-none text-indigo-600 font-bold"></td>
+                <td class="p-2"><input type="number" value="${item.days}" onchange="updateData(${item.id}, 'days', this.value)" class="w-16 bg-slate-100 rounded px-2 py-1"></td>
+                <td class="p-2"><input type="text" value="${item.detail}" onchange="updateData(${item.id}, 'detail', this.value)" class="w-full bg-transparent outline-none text-slate-400" placeholder="詳細を入力..."></td>
+                <td class="p-2"><input type="number" value="${item.weight}" onchange="updateData(${item.id}, 'weight', this.value)" class="w-16 bg-slate-100 rounded px-2 py-1"></td>
+                <td class="p-2 text-center"><input type="checkbox" ${item.completed ? 'checked' : ''} onchange="updateData(${item.id}, 'completed', this.checked)" class="w-4 h-4 text-indigo-600 border-slate-300 rounded"></td>
+                <td class="p-2 text-right"><button onclick="removeRow(${item.id})" class="text-slate-300 hover:text-red-500 transition">✕</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        const cappedProgress = Math.min(totalProgress, 100);
+        document.getElementById('totalProgressFill').style.width = `${cappedProgress}%`;
+        document.getElementById('totalProgressText').innerText = `${cappedProgress}%`;
+
+        const grid = document.getElementById('calendarGrid');
+        grid.innerHTML = '';
+        for (let i = 1; i <= 31; i++) {
+            const dayDiv = document.createElement('div');
+            dayDiv.className = `calendar-day ${i === today ? 'bg-indigo-50/50' : ''}`;
+            let html = `<div class="text-[10px] font-bold ${i === today ? 'text-indigo-600' : 'text-slate-300'}">${i}</div>`;
+            kpiData.forEach(kpi => {
+                if (today + kpi.days === i) {
+                    const statusClass = kpi.completed ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-indigo-500 bg-white text-slate-700 shadow-sm';
+                    html += `<div class="kpi-card ${statusClass}">
+                        <div class="font-bold truncate text-[10px]">${kpi.name}</div>
+                        <div class="tooltip">
+                            <div class="font-bold border-b border-slate-600 pb-1 mb-1 text-[11px]">${kpi.name}</div>
+                            <div class="text-indigo-300 font-bold mb-1">目標値: ${kpi.target}</div>
+                            <div class="text-slate-300 text-[10px] leading-relaxed">${kpi.detail || '(詳細なし)'}</div>
+                        </div>
+                    </div>`;
+                }
+            });
+            dayDiv.innerHTML = html;
+            grid.appendChild(dayDiv);
+        }
+    }
+
+    function exportMarkdown() {
+        let md = `### プロジェクト状況レポート\n\n`;
+        md += `#### 【サマリー】\n`;
+        md += `- 全体達成率: ${document.getElementById('totalProgressText').innerText}\n`;
+        md += `- 基準日: ${today}日\n\n`;
+        md += `#### 【KPI・マイルストーン詳細】\n`;
+        md += `| 項目名 | 目標値 | 予定日 | ステータス | 寄与度 | 詳細説明 |\n`;
+        md += `| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
+        
+        kpiData.forEach(kpi => {
+            const status = kpi.completed ? "完了" : "未完了";
+            const targetDate = `${today + kpi.days}日（${kpi.days}日後）`;
+            md += `| ${kpi.name} | ${kpi.target} | ${targetDate} | ${status} | ${kpi.weight}% | ${kpi.detail || '-'} |\n`;
+        });
+
+        document.getElementById('markdownOutput').value = md;
+        document.getElementById('modal').classList.remove('hidden');
+    }
+
+    function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+    function copyToClipboard() {
+        const textarea = document.getElementById('markdownOutput');
+        textarea.select();
+        document.execCommand('copy');
+        alert('コピーしました');
+    }
+
+    addRow();
+</script>
+</body>
+</html>
